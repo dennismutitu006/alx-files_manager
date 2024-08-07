@@ -2,7 +2,7 @@ import sha1 from 'sha1';
 import DBClient from '../utils/db';
 // import RedisClient from '../utils/redis';
 
-// const { ObjectId } = require('mongodb');
+const { ObjectId } = require('mongodb');
 
 class UsersController {
   static async postNew(request, response) {
