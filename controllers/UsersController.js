@@ -1,27 +1,40 @@
+/* eslint-disable import/no-named-as-default */
 import sha1 from 'sha1';
-import DBClient from '../utils/db';
-// import RedisClient from '../utils/redis';
+import Queue from 'bull/lib/queue';
+import dbClient from '../utils/db';
 
-const { ObjectId } = require('mongodb');
+const userQueue = new Queue('email sending');
 
-class UsersController {
-  static async postNew(request, response) {
-    const userEmail = request.body.email;
-    if (!userEmail) {
-      return response.status(400).send({ error: 'Missing email' });
+export default class UsersController {
+  static async postNew(req, res) {
+    const email = req.body ? req.body.email : null;
+    const password = req.body ? req.body.password : null;
+
+    if (!email) {
+      res.status(400).json({ error: 'Missing email' });
+      return;
     }
-
-    const userPassword = request.body.password;
-    if (!userPassword) {
-      return response.status(400).send({ error: 'Missing password' });
+    if (!password) {
+      res.status(400).json({ error: 'Missing password' });
+      return;
     }
+    const user = await (await dbClient.usersCollection()).findOne({ email });
 
-    const oldEmail = await DBClient.db.collection('users').findOne({ email: userEmail });
-    if (oldEmail) return response.status(400).send({ error: 'Already exist' });
+    if (user) {
+      res.status(400).json({ error: 'Already exist' });
+      return;
+    }
+    const insertionInfo = await (await dbClient.usersCollection())
+      .insertOne({ email, password: sha1(password) });
+    const userId = insertionInfo.insertedId.toString();
 
-    const hashedUserPassword = sha1(userPassword);
-    const endPoint = await DBClient.db.collection('users').insertOne({ email: userEmail, password: hashedUserPassword });
-    return response.status(201).send({ email: userEmail, id: endPoint.insertedId });
+    userQueue.add({ userId });
+    res.status(201).json({ email, id: userId });
+  }
+
+  static async getMe(req, res) {
+    const { user } = req;
+
+    res.status(200).json({ email: user.email, id: user._id.toString() });
   }
 }
-module.exports = UsersController;
